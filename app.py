@@ -498,99 +498,97 @@ def main():
                         )
         
         # ===== KPI VALIDATION SECTION =====
-        with tab3:
-            st.subheader("KPI Validation")
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                # Get databases if not already loaded
-                if 'kpi_databases' not in st.session_state:
-                    st.session_state.kpi_databases = get_databases(st.session_state.conn)
-                
-                kpi_db = st.selectbox(
-                    "Database",
-                    st.session_state.kpi_databases,
-                    key="kpi_db"
+with tab3:
+    st.subheader("KPI Validation")
+    
+    # Get databases if not already loaded
+    if 'kpi_databases' not in st.session_state:
+        st.session_state.kpi_databases = get_databases(st.session_state.conn)
+    
+    kpi_db = st.selectbox(
+        "Database",
+        st.session_state.kpi_databases,
+        key="kpi_db"
+    )
+    
+    # Get schemas for selected database
+    kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
+    kpi_source_schema = st.selectbox(
+        "Source Schema",
+        kpi_schemas,
+        key="kpi_source_schema"
+    )
+    kpi_target_schema = st.selectbox(
+        "Target Schema",
+        kpi_schemas,
+        key="kpi_target_schema"
+    )
+    
+    st.markdown("### Select KPIs to Validate")
+    
+    # Select All checkbox
+    select_all = st.checkbox("Select All", value=True, key="kpi_select_all")
+    
+    # Create a container for the KPI checkboxes
+    kpi_container = st.container()
+    
+    # KPI checkboxes - now in a single row without nested columns
+    with kpi_container:
+        kpi_total_orders = st.checkbox("Total Orders", value=select_all, key="kpi_total_orders")
+        kpi_total_revenue = st.checkbox("Total Revenue", value=select_all, key="kpi_total_revenue")
+        kpi_avg_order = st.checkbox("Average Order Value", value=select_all, key="kpi_avg_order")
+        kpi_max_order = st.checkbox("Max Order Value", value=select_all, key="kpi_max_order")
+        kpi_min_order = st.checkbox("Min Order Value", value=select_all, key="kpi_min_order")
+        kpi_completed = st.checkbox("Completed Orders", value=select_all, key="kpi_completed")
+        kpi_cancelled = st.checkbox("Cancelled Orders", value=select_all, key="kpi_cancelled")
+        kpi_april_orders = st.checkbox("Orders in April 2025", value=select_all, key="kpi_april_orders")
+        kpi_unique_customers = st.checkbox("Unique Customers", value=select_all, key="kpi_unique_customers")
+    
+    if st.button("Run KPI Validation", key="kpi_execute"):
+        # Get selected KPIs
+        selected_kpis = []
+        if kpi_total_orders: selected_kpis.append("Total Orders")
+        if kpi_total_revenue: selected_kpis.append("Total Revenue")
+        if kpi_avg_order: selected_kpis.append("Average Order Value")
+        if kpi_max_order: selected_kpis.append("Max Order Value")
+        if kpi_min_order: selected_kpis.append("Min Order Value")
+        if kpi_completed: selected_kpis.append("Completed Orders")
+        if kpi_cancelled: selected_kpis.append("Cancelled Orders")
+        if kpi_april_orders: selected_kpis.append("Orders in April 2025")
+        if kpi_unique_customers: selected_kpis.append("Unique Customers")
+        
+        if not selected_kpis:
+            st.warning("⚠️ No KPIs selected for validation")
+        else:
+            with st.spinner("Running KPI validation..."):
+                df, message = validate_kpis(
+                    st.session_state.conn,
+                    kpi_db,
+                    kpi_source_schema,
+                    kpi_target_schema,
+                    selected_kpis
                 )
                 
-                # Get schemas for selected database
-                kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
-                kpi_source_schema = st.selectbox(
-                    "Source Schema",
-                    kpi_schemas,
-                    key="kpi_source_schema"
-                )
-                kpi_target_schema = st.selectbox(
-                    "Target Schema",
-                    kpi_schemas,
-                    key="kpi_target_schema"
-                )
+                if message.startswith("✅"):
+                    st.success(message)
+                else:
+                    st.error(message)
                 
-                st.markdown("### Select KPIs to Validate")
-                
-                # Select All checkbox
-                select_all = st.checkbox("Select All", value=True, key="kpi_select_all")
-                
-                # KPI checkboxes
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    kpi_total_orders = st.checkbox("Total Orders", value=select_all, key="kpi_total_orders")
-                    kpi_total_revenue = st.checkbox("Total Revenue", value=select_all, key="kpi_total_revenue")
-                    kpi_avg_order = st.checkbox("Average Order Value", value=select_all, key="kpi_avg_order")
-                with col2:
-                    kpi_max_order = st.checkbox("Max Order Value", value=select_all, key="kpi_max_order")
-                    kpi_min_order = st.checkbox("Min Order Value", value=select_all, key="kpi_min_order")
-                    kpi_completed = st.checkbox("Completed Orders", value=select_all, key="kpi_completed")
-                with col3:
-                    kpi_cancelled = st.checkbox("Cancelled Orders", value=select_all, key="kpi_cancelled")
-                    kpi_april_orders = st.checkbox("Orders in April 2025", value=select_all, key="kpi_april_orders")
-                    kpi_unique_customers = st.checkbox("Unique Customers", value=select_all, key="kpi_unique_customers")
-                
-                if st.button("Run KPI Validation", key="kpi_execute"):
-                    # Get selected KPIs
-                    selected_kpis = []
-                    if kpi_total_orders: selected_kpis.append("Total Orders")
-                    if kpi_total_revenue: selected_kpis.append("Total Revenue")
-                    if kpi_avg_order: selected_kpis.append("Average Order Value")
-                    if kpi_max_order: selected_kpis.append("Max Order Value")
-                    if kpi_min_order: selected_kpis.append("Min Order Value")
-                    if kpi_completed: selected_kpis.append("Completed Orders")
-                    if kpi_cancelled: selected_kpis.append("Cancelled Orders")
-                    if kpi_april_orders: selected_kpis.append("Orders in April 2025")
-                    if kpi_unique_customers: selected_kpis.append("Unique Customers")
-                    
-                    if not selected_kpis:
-                        st.warning("⚠️ No KPIs selected for validation")
-                    else:
-                        with st.spinner("Running KPI validation..."):
-                            df, message = validate_kpis(
-                                st.session_state.conn,
-                                kpi_db,
-                                kpi_source_schema,
-                                kpi_target_schema,
-                                selected_kpis
-                            )
-                            
-                            if message.startswith("✅"):
-                                st.success(message)
-                            else:
-                                st.error(message)
-                            
-                            st.session_state.kpi_results = df
-            
-            with col2:
-                if 'kpi_results' in st.session_state:
-                    st.dataframe(st.session_state.kpi_results)
-                    
-                    # Download button
-                    if not st.session_state.kpi_results.empty:
-                        csv = st.session_state.kpi_results.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📥 Download KPI Report",
-                            data=csv,
-                            file_name=f"kpi_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime='text/csv'
-                        )
+                st.session_state.kpi_results = df
+    
+    if 'kpi_results' in st.session_state:
+        st.dataframe(st.session_state.kpi_results)
+        
+        # Download button
+        if not st.session_state.kpi_results.empty:
+            csv = st.session_state.kpi_results.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download KPI Report",
+                data=csv,
+                file_name=f"kpi_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime='text/csv'
+            )               
+                   
 
 if __name__ == "__main__":
     main()
