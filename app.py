@@ -274,7 +274,7 @@ def validate_kpis(conn, database, source_schema, target_schema, selected_kpis):
             status = "⚠️ Mismatch"
             
             try:
-                if (isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float))):
+                if (isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float)):
                     diff = float(result_source) - float(result_clone)
                     pct_diff = (diff / float(result_source)) * 100 if float(result_source) != 0 else float('inf')
                     status = '✅ Match' if diff == 0 else '⚠️ Mismatch'
@@ -337,7 +337,7 @@ def main():
                     st.session_state.login_success = True
                     st.session_state.conn_details = {"user": user, "account": account}
                     st.success(msg)
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error(msg)
 
@@ -352,7 +352,7 @@ def main():
                 st.session_state.login_success = False
                 st.session_state.conn_details = {}
                 st.sidebar.success(msg)
-                st.experimental_rerun()
+                st.rerun()
 
         # ===== CLONE SECTION =====
         st.markdown("## ⎘ Schema Clone")
