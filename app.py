@@ -498,33 +498,33 @@ def main():
                         )
         
         # ===== KPI VALIDATION SECTION =====
-with tab3:
-    st.subheader("KPI Validation")
+        with tab3:
+            st.subheader("KPI Validation")
     
-    # Get databases if not already loaded
-    if 'kpi_databases' not in st.session_state:
-        st.session_state.kpi_databases = get_databases(st.session_state.conn)
+            # Get databases if not already loaded
+            if 'kpi_databases' not in st.session_state:
+                st.session_state.kpi_databases = get_databases(st.session_state.conn)
     
-    kpi_db = st.selectbox(
-        "Database",
-        st.session_state.kpi_databases,
-        key="kpi_db"
-    )
+            kpi_db = st.selectbox(
+            "Database",
+            st.session_state.kpi_databases,
+            key="kpi_db"
+            )
     
-    # Get schemas for selected database
-    kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
-    kpi_source_schema = st.selectbox(
-        "Source Schema",
-        kpi_schemas,
-        key="kpi_source_schema"
-    )
-    kpi_target_schema = st.selectbox(
-        "Target Schema",
-        kpi_schemas,
-        key="kpi_target_schema"
-    )
+        # Get schemas for selected database
+        kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
+        kpi_source_schema = st.selectbox(
+            "Source Schema",
+            kpi_schemas,
+            key="kpi_source_schema"
+        )
+        kpi_target_schema = st.selectbox(
+            "Target Schema",
+            kpi_schemas,
+            key="kpi_target_schema"
+        )
     
-    st.markdown("### Select KPIs to Validate")
+        st.markdown("### Select KPIs to Validate")
     
     # Select All checkbox
     select_all = st.checkbox("Select All", value=True, key="kpi_select_all")
