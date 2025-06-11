@@ -307,7 +307,7 @@ def main():
         st.session_state.login_success = False
 
     # Add company logo at the top
-    st.image("logo_url", width=200)
+    st.image("https://streamlit.io/images/brand/streamlit-logo-secondary-colormark-darktext.png", width=200)
     st.title("Snowflake Validation Automation Tool")
 
     # ===== LOGIN SECTION =====
