@@ -6,6 +6,10 @@ from datetime import datetime
 import re
 import io
 import time
+import warnings
+
+# Suppress warnings
+warnings.filterwarnings("ignore")
 
 # ========== SNOWFLAKE FUNCTIONS ==========
 def get_snowflake_connection(user, password, account):
@@ -271,7 +275,7 @@ def validate_kpis(conn, database, source_schema, target_schema, selected_kpis):
             status = "⚠️ Mismatch"
             
             try:
-                if (isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float))):
+                if isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float)):
                     diff = float(result_source) - float(result_clone)
                     pct_diff = (diff / float(result_source)) * 100 if float(result_source) != 0 else float('inf')
                     status = '✅ Match' if diff == 0 else '⚠️ Mismatch'
@@ -307,7 +311,7 @@ def main():
     )
     
     # Add company logo at the top
-    st.image("logo_url", width=200)
+    st.image("https://streamlit.io/images/brand/streamlit-logo-secondary-colormark-darktext.png", width=200)
     st.title("Snowflake Validation Automation Tool")
     
     # Initialize session state
@@ -335,6 +339,7 @@ def main():
                         st.session_state.login_success = True
                         st.session_state.conn_details = {"user": user, "account": account}
                         st.success(msg)
+                        st.rerun()
                     else:
                         st.error(msg)
     
@@ -349,7 +354,7 @@ def main():
                 st.session_state.login_success = False
                 st.session_state.conn_details = {}
                 st.sidebar.success(msg)
-                st.experimental_rerun()
+                st.rerun()
     
     # ===== MAIN APP =====
     if st.session_state.login_success:
