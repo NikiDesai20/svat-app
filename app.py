@@ -5,10 +5,7 @@ import pandas as pd
 from datetime import datetime
 import re
 import io
-import warnings
-
-# Suppress Streamlit warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+import time
 
 # ========== SNOWFLAKE FUNCTIONS ==========
 def get_snowflake_connection(user, password, account):
@@ -274,7 +271,7 @@ def validate_kpis(conn, database, source_schema, target_schema, selected_kpis):
             status = "⚠️ Mismatch"
             
             try:
-                if (isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float)):
+                if (isinstance(result_source, (int, float)) and isinstance(result_clone, (int, float))):
                     diff = float(result_source) - float(result_clone)
                     pct_diff = (diff / float(result_source)) * 100 if float(result_source) != 0 else float('inf')
                     status = '✅ Match' if diff == 0 else '⚠️ Mismatch'
@@ -302,6 +299,17 @@ def validate_kpis(conn, database, source_schema, target_schema, selected_kpis):
 
 # ========== STREAMLIT UI ==========
 def main():
+    # Set page config
+    st.set_page_config(
+        page_title="Snowflake Validation Automation Tool",
+        page_icon="❄️",
+        layout="wide"
+    )
+    
+    # Add company logo at the top
+    st.image("logo_url", width=200)
+    st.title("Snowflake Validation Automation Tool")
+    
     # Initialize session state
     if 'conn' not in st.session_state:
         st.session_state.conn = None
@@ -309,41 +317,30 @@ def main():
         st.session_state.current_db = None
     if 'login_success' not in st.session_state:
         st.session_state.login_success = False
-
-    # Add company logo at the top with error handling
-    try:
-        # Using a placeholder URL - replace with your actual logo URL or path
-        st.image("https://via.placeholder.com/200x50?text=My+Logo", width=200)
-    except Exception as e:
-        st.warning(f"Could not load logo: {str(e)}")
-
-    st.title("Snowflake Validation Automation Tool")
-
+    
     # ===== LOGIN SECTION =====
     with st.expander("🔐 Login", expanded=not st.session_state.login_success):
         with st.form("login_form"):
-            st.markdown("### Snowflake Connection")
+            st.subheader("Snowflake Connection")
             user = st.text_input("Username", placeholder="your_username")
             password = st.text_input("Password", type="password", placeholder="••••••••")
             account = st.text_input("Account", placeholder="account.region")
-
+            
             login_btn = st.form_submit_button("Connect")
-
-        if login_btn:
-            with st.spinner("Connecting to Snowflake..."):
-                conn, msg = get_snowflake_connection(user, password, account)
-                if conn:
-                    st.session_state.conn = conn
-                    st.session_state.login_success = True
-                    st.session_state.conn_details = {"user": user, "account": account}
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-
+            
+            if login_btn:
+                with st.spinner("Connecting to Snowflake..."):
+                    st.session_state.conn, msg = get_snowflake_connection(user, password, account)
+                    if st.session_state.conn:
+                        st.session_state.login_success = True
+                        st.session_state.conn_details = {"user": user, "account": account}
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+    
     # Display connection details if logged in
     if st.session_state.login_success:
-        st.sidebar.markdown("### Connection Details")
+        st.sidebar.subheader("Connection Details")
         st.sidebar.json(st.session_state.conn_details)
         
         if st.sidebar.button("Disconnect"):
@@ -352,154 +349,243 @@ def main():
                 st.session_state.login_success = False
                 st.session_state.conn_details = {}
                 st.sidebar.success(msg)
-                st.rerun()
-
+                st.experimental_rerun()
+    
+    # ===== MAIN APP =====
+    if st.session_state.login_success:
+        # Create tabs
+        tab1, tab2, tab3 = st.tabs(["⎘ Clone", "🔍 Schema Validation", "📊 KPI Validation"])
+        
         # ===== CLONE SECTION =====
-        st.markdown("## ⎘ Schema Clone")
-        with st.form("clone_form"):
-            st.markdown("### Source Selection")
-            databases = get_databases(st.session_state.conn)
-            source_db = st.selectbox("Source Database", databases)
+        with tab1:
+            st.subheader("Schema Clone")
+            col1, col2 = st.columns(2)
             
-            schemas = get_schemas(st.session_state.conn, source_db)
-            source_schema = st.selectbox("Source Schema", schemas)
-            
-            target_schema = st.text_input("Target Schema Name")
-            
-            clone_btn = st.form_submit_button("Execute Clone")
-
-        if clone_btn:
-            with st.spinner("Cloning schema..."):
-                success, message, df = clone_schema(
-                    st.session_state.conn, source_db, source_schema, target_schema
-                )
-                
-                if success:
-                    st.success(message)
-                    st.dataframe(df)
-                else:
-                    st.error(message)
-
-        # ===== SCHEMA VALIDATION SECTION =====
-        st.markdown("## 🔍 Schema Validation")
-        with st.form("validation_form"):
-            st.markdown("### Validation Configuration")
-            val_db = st.selectbox("Database", databases, key="val_db")
-            
-            val_schemas = get_schemas(st.session_state.conn, val_db)
-            val_source_schema = st.selectbox("Source Schema", val_schemas, key="val_source_schema")
-            val_target_schema = st.selectbox("Target Schema", val_schemas, key="val_target_schema")
-            
-            validate_btn = st.form_submit_button("Run Validation")
-
-        if validate_btn:
-            with st.spinner("Running validation..."):
-                # Compare tables
-                table_diff = compare_table_differences(
-                    st.session_state.conn, val_db, val_source_schema, val_target_schema
-                )
-                
-                # Compare columns and data types
-                column_diff, datatype_diff = compare_column_differences(
-                    st.session_state.conn, val_db, val_source_schema, val_target_schema
-                )
-                
-                # Combine all results into one DataFrame for download
-                combined_df = pd.concat([
-                    table_diff.assign(Validation_Type="Table Differences"),
-                    column_diff.assign(Validation_Type="Column Differences"),
-                    datatype_diff.assign(Validation_Type="Data Type Differences")
-                ])
-                
-                st.success("✅ Validation completed successfully!")
-                
-                # Display results in tabs
-                tab1, tab2, tab3 = st.tabs(["Table Differences", "Column Differences", "Data Type Differences"])
-                
-                with tab1:
-                    st.dataframe(table_diff)
-                
-                with tab2:
-                    st.dataframe(column_diff)
-                
-                with tab3:
-                    st.dataframe(datatype_diff)
-                
-                # Download button
-                if not combined_df.empty:
-                    csv = combined_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download Schema Report",
-                        data=csv,
-                        file_name=f"schema_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime='text/csv'
-                    )
-
-        # ===== KPI VALIDATION SECTION =====
-        st.markdown("## 📊 KPI Validation")
-        with st.form("kpi_form"):
-            st.markdown("### KPI Configuration")
-            kpi_db = st.selectbox("Database", databases, key="kpi_db")
-            
-            kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
-            kpi_source_schema = st.selectbox("Source Schema", kpi_schemas, key="kpi_source_schema")
-            kpi_target_schema = st.selectbox("Target Schema", kpi_schemas, key="kpi_target_schema")
-            
-            # KPI Selection Checkboxes
-            st.markdown("### Select KPIs to Validate")
-            kpi_select_all = st.checkbox("Select All", value=True, key="kpi_select_all")
-            
-            col1, col2, col3 = st.columns(3)
             with col1:
-                kpi_total_orders = st.checkbox("Total Orders", value=kpi_select_all, key="kpi_total_orders")
-                kpi_total_revenue = st.checkbox("Total Revenue", value=kpi_select_all, key="kpi_total_revenue")
-                kpi_avg_order = st.checkbox("Average Order Value", value=kpi_select_all, key="kpi_avg_order")
+                # Get databases if not already loaded
+                if 'databases' not in st.session_state:
+                    st.session_state.databases = get_databases(st.session_state.conn)
+                
+                source_db = st.selectbox(
+                    "Source Database",
+                    st.session_state.databases,
+                    key="clone_source_db"
+                )
+                
+                # Get schemas for selected database
+                source_schemas = get_schemas(st.session_state.conn, source_db)
+                source_schema = st.selectbox(
+                    "Source Schema",
+                    source_schemas,
+                    key="clone_source_schema"
+                )
+                
+                target_schema = st.text_input(
+                    "Target Schema Name",
+                    key="clone_target_schema"
+                )
+                
+                if st.button("Execute Clone", key="clone_execute"):
+                    if not target_schema:
+                        st.error("❌ Please enter a target schema name")
+                    else:
+                        with st.spinner(f"Cloning {source_db}.{source_schema} to {source_db}.{target_schema}..."):
+                            success, message, df = clone_schema(
+                                st.session_state.conn, source_db, source_schema, target_schema
+                            )
+                            
+                            if success:
+                                st.success(message)
+                                st.dataframe(df)
+                            else:
+                                st.error(message)
+            
             with col2:
-                kpi_max_order = st.checkbox("Max Order Value", value=kpi_select_all, key="kpi_max_order")
-                kpi_min_order = st.checkbox("Min Order Value", value=kpi_select_all, key="kpi_min_order")
-                kpi_completed = st.checkbox("Completed Orders", value=kpi_select_all, key="kpi_completed")
-            with col3:
-                kpi_cancelled = st.checkbox("Cancelled Orders", value=kpi_select_all, key="kpi_cancelled")
-                kpi_april_orders = st.checkbox("Orders in April 2025", value=kpi_select_all, key="kpi_april_orders")
-                kpi_unique_customers = st.checkbox("Unique Customers", value=kpi_select_all, key="kpi_unique_customers")
+                st.markdown("### Clone Status")
+                if 'clone_status' in st.session_state:
+                    if st.session_state.clone_status.startswith("✅"):
+                        st.success(st.session_state.clone_status)
+                    else:
+                        st.error(st.session_state.clone_status)
+                
+                st.markdown("### Clone Details")
+                if 'clone_details' in st.session_state:
+                    st.json(st.session_state.clone_details)
+        
+        # ===== SCHEMA VALIDATION SECTION =====
+        with tab2:
+            st.subheader("Schema Validation")
+            col1, col2 = st.columns([1, 2])
             
-            kpi_validate_btn = st.form_submit_button("Run KPI Validation")
-
-        if kpi_validate_btn:
-            # Get selected KPIs
-            selected_kpis = []
-            if kpi_total_orders: selected_kpis.append("Total Orders")
-            if kpi_total_revenue: selected_kpis.append("Total Revenue")
-            if kpi_avg_order: selected_kpis.append("Average Order Value")
-            if kpi_max_order: selected_kpis.append("Max Order Value")
-            if kpi_min_order: selected_kpis.append("Min Order Value")
-            if kpi_completed: selected_kpis.append("Completed Orders")
-            if kpi_cancelled: selected_kpis.append("Cancelled Orders")
-            if kpi_april_orders: selected_kpis.append("Orders in April 2025")
-            if kpi_unique_customers: selected_kpis.append("Unique Customers")
-            
-            if not selected_kpis:
-                st.warning("⚠️ No KPIs selected for validation")
-            else:
-                with st.spinner("Running KPI validation..."):
-                    df, msg = validate_kpis(
-                        st.session_state.conn, kpi_db, kpi_source_schema, kpi_target_schema, selected_kpis
-                    )
-                    
-                    if msg.startswith("✅"):
-                        st.success(msg)
-                        st.dataframe(df)
+            with col1:
+                # Get databases if not already loaded
+                if 'val_databases' not in st.session_state:
+                    st.session_state.val_databases = get_databases(st.session_state.conn)
+                
+                val_db = st.selectbox(
+                    "Database",
+                    st.session_state.val_databases,
+                    key="val_db"
+                )
+                
+                # Get schemas for selected database
+                val_schemas = get_schemas(st.session_state.conn, val_db)
+                val_source_schema = st.selectbox(
+                    "Source Schema",
+                    val_schemas,
+                    key="val_source_schema"
+                )
+                val_target_schema = st.selectbox(
+                    "Target Schema",
+                    val_schemas,
+                    key="val_target_schema"
+                )
+                
+                if st.button("Run Validation", key="val_execute"):
+                    with st.spinner("Running validation..."):
+                        # Compare tables
+                        table_diff = compare_table_differences(
+                            st.session_state.conn, val_db, val_source_schema, val_target_schema
+                        )
                         
-                        # Download button
-                        csv = df.to_csv(index=False).encode('utf-8')
+                        # Compare columns and data types
+                        column_diff, datatype_diff = compare_column_differences(
+                            st.session_state.conn, val_db, val_source_schema, val_target_schema
+                        )
+                        
+                        # Combine all results into one DataFrame for download
+                        combined_df = pd.concat([
+                            table_diff.assign(Validation_Type="Table Differences"),
+                            column_diff.assign(Validation_Type="Column Differences"),
+                            datatype_diff.assign(Validation_Type="Data Type Differences")
+                        ])
+                        
+                        st.session_state.val_results = {
+                            "table_diff": table_diff,
+                            "column_diff": column_diff,
+                            "datatype_diff": datatype_diff,
+                            "combined": combined_df
+                        }
+                        
+                        st.success("✅ Validation completed successfully!")
+            
+            with col2:
+                if 'val_results' in st.session_state:
+                    tab1, tab2, tab3 = st.tabs(["Table Differences", "Column Differences", "Data Type Differences"])
+                    
+                    with tab1:
+                        st.dataframe(st.session_state.val_results["table_diff"])
+                    
+                    with tab2:
+                        st.dataframe(st.session_state.val_results["column_diff"])
+                    
+                    with tab3:
+                        st.dataframe(st.session_state.val_results["datatype_diff"])
+                    
+                    # Download button
+                    if not st.session_state.val_results["combined"].empty:
+                        csv = st.session_state.val_results["combined"].to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Schema Report",
+                            data=csv,
+                            file_name=f"schema_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime='text/csv'
+                        )
+        
+        # ===== KPI VALIDATION SECTION =====
+        with tab3:
+            st.subheader("KPI Validation")
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                # Get databases if not already loaded
+                if 'kpi_databases' not in st.session_state:
+                    st.session_state.kpi_databases = get_databases(st.session_state.conn)
+                
+                kpi_db = st.selectbox(
+                    "Database",
+                    st.session_state.kpi_databases,
+                    key="kpi_db"
+                )
+                
+                # Get schemas for selected database
+                kpi_schemas = get_schemas(st.session_state.conn, kpi_db)
+                kpi_source_schema = st.selectbox(
+                    "Source Schema",
+                    kpi_schemas,
+                    key="kpi_source_schema"
+                )
+                kpi_target_schema = st.selectbox(
+                    "Target Schema",
+                    kpi_schemas,
+                    key="kpi_target_schema"
+                )
+                
+                st.markdown("### Select KPIs to Validate")
+                
+                # Select All checkbox
+                select_all = st.checkbox("Select All", value=True, key="kpi_select_all")
+                
+                # KPI checkboxes
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    kpi_total_orders = st.checkbox("Total Orders", value=select_all, key="kpi_total_orders")
+                    kpi_total_revenue = st.checkbox("Total Revenue", value=select_all, key="kpi_total_revenue")
+                    kpi_avg_order = st.checkbox("Average Order Value", value=select_all, key="kpi_avg_order")
+                with col2:
+                    kpi_max_order = st.checkbox("Max Order Value", value=select_all, key="kpi_max_order")
+                    kpi_min_order = st.checkbox("Min Order Value", value=select_all, key="kpi_min_order")
+                    kpi_completed = st.checkbox("Completed Orders", value=select_all, key="kpi_completed")
+                with col3:
+                    kpi_cancelled = st.checkbox("Cancelled Orders", value=select_all, key="kpi_cancelled")
+                    kpi_april_orders = st.checkbox("Orders in April 2025", value=select_all, key="kpi_april_orders")
+                    kpi_unique_customers = st.checkbox("Unique Customers", value=select_all, key="kpi_unique_customers")
+                
+                if st.button("Run KPI Validation", key="kpi_execute"):
+                    # Get selected KPIs
+                    selected_kpis = []
+                    if kpi_total_orders: selected_kpis.append("Total Orders")
+                    if kpi_total_revenue: selected_kpis.append("Total Revenue")
+                    if kpi_avg_order: selected_kpis.append("Average Order Value")
+                    if kpi_max_order: selected_kpis.append("Max Order Value")
+                    if kpi_min_order: selected_kpis.append("Min Order Value")
+                    if kpi_completed: selected_kpis.append("Completed Orders")
+                    if kpi_cancelled: selected_kpis.append("Cancelled Orders")
+                    if kpi_april_orders: selected_kpis.append("Orders in April 2025")
+                    if kpi_unique_customers: selected_kpis.append("Unique Customers")
+                    
+                    if not selected_kpis:
+                        st.warning("⚠️ No KPIs selected for validation")
+                    else:
+                        with st.spinner("Running KPI validation..."):
+                            df, message = validate_kpis(
+                                st.session_state.conn,
+                                kpi_db,
+                                kpi_source_schema,
+                                kpi_target_schema,
+                                selected_kpis
+                            )
+                            
+                            if message.startswith("✅"):
+                                st.success(message)
+                            else:
+                                st.error(message)
+                            
+                            st.session_state.kpi_results = df
+            
+            with col2:
+                if 'kpi_results' in st.session_state:
+                    st.dataframe(st.session_state.kpi_results)
+                    
+                    # Download button
+                    if not st.session_state.kpi_results.empty:
+                        csv = st.session_state.kpi_results.to_csv(index=False).encode('utf-8')
                         st.download_button(
                             label="📥 Download KPI Report",
                             data=csv,
                             file_name=f"kpi_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                             mime='text/csv'
                         )
-                    else:
-                        st.error(msg)
 
 if __name__ == "__main__":
     main()
