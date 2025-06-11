@@ -323,28 +323,36 @@ def main():
         st.session_state.login_success = False
     
     # ===== LOGIN SECTION =====
-    with st.expander("🔐 Login", expanded=not st.session_state.login_success):
-        with st.form("login_form"):
-            st.subheader("Snowflake Connection")
-            user = st.text_input("Username", placeholder="your_username")
-            password = st.text_input("Password", type="password", placeholder="••••••••")
-            account = st.text_input("Account", placeholder="account.region")
-            
-            login_btn = st.form_submit_button("Connect")
-            
-            if login_btn:
-                with st.spinner("Connecting to Snowflake..."):
-                    st.session_state.conn, msg = get_snowflake_connection(user, password, account)
-                    if st.session_state.conn:
-                        st.session_state.login_success = True
-                        st.session_state.conn_details = {"user": user, "account": account}
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+    if not st.session_state.login_success:
+        with st.container():
+            st.subheader("🔐 Login")
+            with st.form("login_form"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    user = st.text_input("Username", placeholder="your_username")
+                    password = st.text_input("Password", type="password", placeholder="••••••••")
+                
+                with col2:
+                    account = st.text_input("Account", placeholder="account.region")
+                    st.write("")  # Spacer
+                    st.write("")  # Spacer
+                    login_btn = st.form_submit_button("Connect", use_container_width=True)
+                
+                if login_btn:
+                    with st.spinner("Connecting to Snowflake..."):
+                        st.session_state.conn, msg = get_snowflake_connection(user, password, account)
+                        if st.session_state.conn:
+                            st.session_state.login_success = True
+                            st.session_state.conn_details = {"user": user, "account": account}
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
     
-    # Display connection details if logged in
+    # ===== MAIN APP AFTER LOGIN =====
     if st.session_state.login_success:
+        # Display connection details in sidebar
         st.sidebar.subheader("Connection Details")
         st.sidebar.json(st.session_state.conn_details)
         
@@ -355,42 +363,47 @@ def main():
                 st.session_state.conn_details = {}
                 st.sidebar.success(msg)
                 st.rerun()
-    
-    # ===== MAIN APP =====
-    if st.session_state.login_success:
-        # Create tabs
-        tab1, tab2, tab3 = st.tabs(["⎘ Clone", "🔍 Schema Validation", "📊 KPI Validation"])
         
-        # ===== CLONE SECTION =====
+        # Create tabs for main functionality
+        tab1, tab2, tab3 = st.tabs(["⎘ Schema Clone", "🔍 Schema Validation", "📊 KPI Validation"])
+        
+        # ===== SCHEMA CLONE TAB =====
         with tab1:
             st.subheader("Schema Clone")
-            col1, col2 = st.columns(2)
             
-            with col1:
-                # Get databases if not already loaded
-                if 'databases' not in st.session_state:
-                    st.session_state.databases = get_databases(st.session_state.conn)
+            with st.form("clone_form"):
+                col1, col2 = st.columns(2)
                 
-                source_db = st.selectbox(
-                    "Source Database",
-                    st.session_state.databases,
-                    key="clone_source_db"
-                )
+                with col1:
+                    # Get databases if not already loaded
+                    if 'databases' not in st.session_state:
+                        st.session_state.databases = get_databases(st.session_state.conn)
+                    
+                    source_db = st.selectbox(
+                        "Source Database",
+                        st.session_state.databases,
+                        key="clone_source_db"
+                    )
+                    
+                    # Get schemas for selected database
+                    source_schemas = get_schemas(st.session_state.conn, source_db)
+                    source_schema = st.selectbox(
+                        "Source Schema",
+                        source_schemas,
+                        key="clone_source_schema"
+                    )
                 
-                # Get schemas for selected database
-                source_schemas = get_schemas(st.session_state.conn, source_db)
-                source_schema = st.selectbox(
-                    "Source Schema",
-                    source_schemas,
-                    key="clone_source_schema"
-                )
+                with col2:
+                    target_schema = st.text_input(
+                        "Target Schema Name",
+                        key="clone_target_schema",
+                        placeholder="Enter new schema name"
+                    )
+                    
+                    st.write("")  # Spacer
+                    clone_btn = st.form_submit_button("Execute Clone", use_container_width=True)
                 
-                target_schema = st.text_input(
-                    "Target Schema Name",
-                    key="clone_target_schema"
-                )
-                
-                if st.button("Execute Clone", key="clone_execute"):
+                if clone_btn:
                     if not target_schema:
                         st.error("❌ Please enter a target schema name")
                     else:
@@ -404,49 +417,43 @@ def main():
                                 st.dataframe(df)
                             else:
                                 st.error(message)
-            
-            with col2:
-                st.markdown("### Clone Status")
-                if 'clone_status' in st.session_state:
-                    if st.session_state.clone_status.startswith("✅"):
-                        st.success(st.session_state.clone_status)
-                    else:
-                        st.error(st.session_state.clone_status)
-                
-                st.markdown("### Clone Details")
-                if 'clone_details' in st.session_state:
-                    st.json(st.session_state.clone_details)
         
-        # ===== SCHEMA VALIDATION SECTION =====
+        # ===== SCHEMA VALIDATION TAB =====
         with tab2:
             st.subheader("Schema Validation")
-            col1, col2 = st.columns([1, 2])
             
-            with col1:
-                # Get databases if not already loaded
-                if 'val_databases' not in st.session_state:
-                    st.session_state.val_databases = get_databases(st.session_state.conn)
+            with st.form("validation_form"):
+                col1, col2 = st.columns(2)
                 
-                val_db = st.selectbox(
-                    "Database",
-                    st.session_state.val_databases,
-                    key="val_db"
-                )
+                with col1:
+                    # Get databases if not already loaded
+                    if 'val_databases' not in st.session_state:
+                        st.session_state.val_databases = get_databases(st.session_state.conn)
+                    
+                    val_db = st.selectbox(
+                        "Database",
+                        st.session_state.val_databases,
+                        key="val_db"
+                    )
                 
-                # Get schemas for selected database
-                val_schemas = get_schemas(st.session_state.conn, val_db)
-                val_source_schema = st.selectbox(
-                    "Source Schema",
-                    val_schemas,
-                    key="val_source_schema"
-                )
-                val_target_schema = st.selectbox(
-                    "Target Schema",
-                    val_schemas,
-                    key="val_target_schema"
-                )
+                with col2:
+                    # Get schemas for selected database
+                    val_schemas = get_schemas(st.session_state.conn, val_db)
+                    
+                    val_source_schema = st.selectbox(
+                        "Source Schema",
+                        val_schemas,
+                        key="val_source_schema"
+                    )
+                    val_target_schema = st.selectbox(
+                        "Target Schema",
+                        val_schemas,
+                        key="val_target_schema"
+                    )
                 
-                if st.button("Run Validation", key="val_execute"):
+                validate_btn = st.form_submit_button("Run Validation", use_container_width=True)
+                
+                if validate_btn:
                     with st.spinner("Running validation..."):
                         # Compare tables
                         table_diff = compare_table_differences(
@@ -474,26 +481,36 @@ def main():
                         
                         st.success("✅ Validation completed successfully!")
             
-            with col2:
-                if 'val_results' in st.session_state:
+            # Display results if available
+            if 'val_results' in st.session_state:
+                with st.expander("Validation Results", expanded=True):
                     tab1, tab2, tab3 = st.tabs(["Table Differences", "Column Differences", "Data Type Differences"])
                     
                     with tab1:
-                        st.dataframe(st.session_state.val_results["table_diff"])
+                        if st.session_state.val_results["table_diff"].empty:
+                            st.info("✅ No table differences found between schemas")
+                        else:
+                            st.dataframe(st.session_state.val_results["table_diff"])
                     
                     with tab2:
-                        st.dataframe(st.session_state.val_results["column_diff"])
+                        if st.session_state.val_results["column_diff"].empty:
+                            st.info("✅ No column differences found between schemas")
+                        else:
+                            st.dataframe(st.session_state.val_results["column_diff"])
                     
                     with tab3:
-                        st.dataframe(st.session_state.val_results["datatype_diff"])
-                    
-                    # Download button
-                    if not st.session_state.val_results["combined"].empty:
-                        csv = st.session_state.val_results["combined"].to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📥 Download Schema Report",
-                            data=csv,
-                            file_name=f"schema_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        if st.session_state.val_results["datatype_diff"].empty:
+                            st.info("✅ No data type differences found between schemas")
+                        else:
+                            st.dataframe(st.session_state.val_results["datatype_diff"])
+                
+                # Download button
+                if not st.session_state.val_results["combined"].empty:
+                    csv = st.session_state.val_results["combined"].to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download Schema Report",
+                        data=csv,
+                        file_name=f"schema_validation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                             mime='text/csv'
                         )
         
